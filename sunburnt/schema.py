@@ -1,5 +1,7 @@
 from __future__ import absolute_import
 
+from ._compat import str_type, text_type, long_type, reduce_func
+
 import math
 import operator
 import uuid
@@ -36,10 +38,10 @@ class solr_date(object):
     def __init__(self, v):
         if isinstance(v, solr_date):
             self._dt_obj = v._dt_obj
-        elif isinstance(v, basestring):
+        elif isinstance(v, str_type):
             try:
                 self._dt_obj = datetime_from_w3_datestring(v)
-            except ValueError, e:
+            except ValueError as e:
                 raise SolrError(*e.args)
         elif hasattr(v, "strftime"):
             self._dt_obj = self.from_date(v)
@@ -80,6 +82,8 @@ class solr_date(object):
         if microsecond:
             return u"%s.%06dZ" % (strtime, microsecond)
         return u"%sZ" % (strtime,)
+    def __str__(self):
+        return self.__unicode__()
 
     def __cmp__(self, other):
         try:
@@ -102,7 +106,7 @@ def solr_point_factory(dimension):
         def __init__(self, *args):
             if dimension > 1 and len(args) == 1:
                 v = args[0]
-                if isinstance(v, basestring):
+                if isinstance(v, str_type):
                     v_arr = v.split(',')
                 else:
                     try:
@@ -116,11 +120,12 @@ def solr_point_factory(dimension):
             self.point = tuple(float(v) for v in v_arr)
 
         def __repr__(self):
-            return "solr_point(%s)" % unicode(self)
+            return "solr_point(%s)" % text_type(self)
 
         def __unicode__(self):
             return ','.join(str(p) for p in self.point)
-
+        def __str__(self):
+            return ','.join(str(p) for p in self.point)
     return solr_point
 
 
@@ -169,7 +174,7 @@ class SolrField(object):
         return self.normalize(value)
 
     def to_solr(self, value):
-        return unicode(value)
+        return text_type(value)
 
     def to_query(self, value):
         return RawString(self.to_solr(value)).escape_for_lqs_term()
@@ -183,14 +188,14 @@ class SolrUnicodeField(SolrField):
         if isinstance(value, SolrString):
             return value
         else:
-            return WildcardString(unicode(value))
+            return WildcardString(text_type(value))
 
     def to_query(self, value):
         return value.escape_for_lqs_term()
 
     def from_solr(self, value):
         try:
-            return unicode(value)
+            return text_type(value)
         except UnicodeError:
             raise SolrError("%s could not be coerced to unicode (field %s)" % 
                     (value, self.name))
@@ -201,7 +206,7 @@ class SolrBooleanField(SolrField):
         return u"true" if value else u"false"
 
     def normalize(self, value):
-        if isinstance(value, basestring):
+        if isinstance(value, str_type):
             if value.lower() == "true":
                 return True
             elif value.lower() == "false":
@@ -221,7 +226,7 @@ class SolrBinaryField(SolrField):
                     self.name)
 
     def to_solr(self, value):
-        return unicode(value.encode('base64'))
+        return text_type(value.encode('base64'))
 
     def from_solr(self, value):
         return value.decode('base64')
@@ -253,7 +258,7 @@ class SolrIntField(SolrNumericalField):
 
 
 class SolrLongField(SolrNumericalField):
-    base_type = long
+    base_type = long_type
     min = -(2**63)
     max = 2**63-1
 
@@ -309,7 +314,7 @@ class SolrPointField(SolrField):
         self.value_class = solr_point_factory(self.dimension)
 
     def to_solr(self, v):
-        return unicode(self.value_class(v))
+        return text_type(self.value_class(v))
 
     def normalize(self, v):
         return self.value_class(v).point
@@ -426,7 +431,7 @@ class SolrSchema(object):
     def schema_parse(self, f):
         try:
             schemadoc = lxml.etree.parse(f)
-        except lxml.etree.XMLSyntaxError, e:
+        except lxml.etree.XMLSyntaxError as e:
             raise SolrError("Invalid XML in schema:\n%s" % e.args[0])
 
         field_type_classes = {}
@@ -454,7 +459,7 @@ class SolrSchema(object):
     def field_type_factory(self, field_type_node):
         try:
             name, class_name = field_type_node.attrib['name'], field_type_node.attrib['class']
-        except KeyError, e:
+        except KeyError as e:
             raise SolrError("Invalid schema.xml: missing %s attribute on fieldType" % e.args[0])
         #Obtain field type for given class. Defaults to generic SolrField.
         field_class = self.solr_data_types.get(class_name, SolrField)
@@ -464,11 +469,11 @@ class SolrSchema(object):
     def field_factory(self, field_node, field_type_classes, dynamic):
         try:
             name, field_type = field_node.attrib['name'], field_node.attrib['type']
-        except KeyError, e:
+        except KeyError as e:
             raise SolrError("Invalid schema.xml: missing %s attribute on field" % e.args[0])
         try:
             field_type_class = field_type_classes[field_type]
-        except KeyError, e:
+        except KeyError as e:
             raise SolrError("Invalid schema.xml: %s field_type undefined" % field_type)
         return name, field_type_class(dynamic=dynamic,
             **self.translate_attributes(field_node.attrib))
@@ -484,7 +489,7 @@ class SolrSchema(object):
                 if self.fields[name].required]
 
     def check_fields(self, field_names, required_atts=None):
-        if isinstance(field_names, basestring):
+        if isinstance(field_names, str_type):
             field_names = [field_names]
         if required_atts is None:
             required_atts = {}
@@ -581,7 +586,7 @@ class SolrUpdate(object):
 
     def fields(self, name, values):
         # values may be multivalued - so we treat that as the default case
-        if not hasattr(values, "__iter__"):
+        if isinstance(values, text_type) or not hasattr(values, "__iter__"):
             values = [values]
         field_values = [self.schema.field_from_user_data(name, value) for value in values]
         return [self.FIELD({'name':name}, field_value.to_solr())
@@ -595,7 +600,7 @@ class SolrUpdate(object):
         if not doc:
             return self.DOC()
         else:
-            return self.DOC(*reduce(operator.add,
+            return self.DOC(*reduce_func(operator.add,
                                     [self.fields(name, values)
                                      for name, values in doc.items()]))
 
@@ -610,6 +615,9 @@ class SolrUpdate(object):
 
     def __str__(self):
         return lxml.etree.tostring(self.xml, encoding='utf-8')
+    def tobytes(self):
+        return lxml.etree.tostring(self.xml, encoding='utf-8')
+        
 
 
 class SolrDelete(object):
@@ -638,7 +646,7 @@ class SolrDelete(object):
         # Is this a dictionary, or an document object, or a thing
         # that can be cast to a uniqueKey? (which could also be an
         # arbitrary object.
-        if isinstance(doc, (basestring, int, long, float)):
+        if isinstance(doc, (str_type, int, text_type, float)):
             # It's obviously not a document object, just coerce to appropriate type
             doc_id = doc
         elif hasattr(doc, "items"):
@@ -660,9 +668,9 @@ class SolrDelete(object):
         return doc_id_inst
 
     def delete_queries(self, queries):
-        if not hasattr(queries, "__iter__"):
+        if isinstance(queries, text_type) or not hasattr(queries, "__iter__"):
             queries = [queries]
-        return [self.QUERY(unicode(query)) for query in queries]
+        return [self.QUERY(text_type(query)) for query in queries]
 
     def __str__(self):
         return lxml.etree.tostring(self.xml, encoding='utf-8')
@@ -849,7 +857,7 @@ def value_from_node(node):
     elif node.tag in ('short', 'int'):
         value = int(node.text)
     elif node.tag == 'long':
-        value = long(node.text)
+        value = text_type(node.text)
     elif node.tag == 'bool':
         value = True if node.text == "true" else False
     elif node.tag in ('float', 'double'):

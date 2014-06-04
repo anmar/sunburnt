@@ -1,10 +1,6 @@
 from __future__ import absolute_import
 
-try:
-    from cStringIO import StringIO
-except ImportError:
-    from StringIO import StringIO
-
+from ._compat import stringio_type
 import datetime
 
 from lxml.builder import E
@@ -62,7 +58,7 @@ schema_string = \
   <uniqueKey>int_field</uniqueKey>
 </schema>"""
 
-schema = SolrSchema(StringIO(schema_string))
+schema = SolrSchema(stringio_type.StringIO(schema_string))
 
 class MockInterface(object):
     schema = schema
@@ -237,8 +233,8 @@ def check_query_data(method, args, kwargs, output):
         assert p == output, "Unequal: %r, %r" % (p, output)
     except AssertionError:
         if debug:
-            print p
-            print output
+            print(p)
+            print(output)
             import pdb;pdb.set_trace()
             raise
         else:
@@ -495,8 +491,8 @@ def check_complex_boolean_query(solr_search, query, output):
         assert p == output
     except AssertionError:
         if debug:
-            print p
-            print output
+            print(p)
+            print(output)
             import pdb;pdb.set_trace()
             raise
         else:
@@ -507,8 +503,8 @@ def check_complex_boolean_query(solr_search, query, output):
         assert p == q
     except AssertionError:
         if debug:
-            print p
-            print q
+            print(p)
+            print(q)
             import pdb;pdb.set_trace()
             raise
 
