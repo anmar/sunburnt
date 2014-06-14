@@ -428,7 +428,10 @@ class SolrSchema(object):
             schemadoc = lxml.etree.parse(f)
         except lxml.etree.XMLSyntaxError, e:
             raise SolrError("Invalid XML in schema:\n%s" % e.args[0])
-
+        try:
+            schemadoc.xinclude()
+        except:
+            pass
         field_type_classes = {}
         for field_type_node in schemadoc.xpath("/schema/types/fieldType|/schema/types/fieldtype|/schema/fieldType|/schema/fieldtype"):
             name, field_type_class = self.field_type_factory(field_type_node)
