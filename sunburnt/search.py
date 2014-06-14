@@ -1,5 +1,7 @@
 from __future__ import absolute_import
 
+from ._compat import PY2, str_type, text_type, reduce_func
+
 import collections, copy, operator, re
 
 from .schema import SolrError, SolrBooleanField, SolrUnicodeField, WildcardFieldInstance
@@ -40,35 +42,35 @@ class LuceneQuery(object):
 
     def options(self):
         opts = {}
-        s = unicode(self)
+        s = text_type(self)
         if s:
             opts[self.option_flag] = s
         return opts
 
     def serialize_debug(self, indent=0):
         indentspace = indent * ' '
-        print '%s%s (%s)' % (indentspace, repr(self), "Normalized" if self.normalized else "Not normalized")
-        print '%s%s' % (indentspace, '{')
+        print('%s%s (%s)' % (indentspace, repr(self), "Normalized" if self.normalized else "Not normalized"))
+        print('%s%s' % (indentspace, '{'))
         for term in self.terms.items():
-            print '%s%s' % (indentspace, term)
+            print('%s%s' % (indentspace, term))
         for phrase in self.phrases.items():
-            print '%s%s' % (indentspace, phrase)
+            print('%s%s' % (indentspace, phrase))
         for range in self.ranges:
-            print '%s%s' % (indentspace, range)
+            print('%s%s' % (indentspace, range))
         if self.subqueries:
             if self._and:
-                print '%sAND:' % indentspace
+                print('%sAND:' % indentspace)
             elif self._or:
-                print '%sOR:' % indentspace
+                print('%sOR:' % indentspace)
             elif self._not:
-                print '%sNOT:' % indentspace
+                print('%sNOT:' % indentspace)
             elif self._pow is not False:
-                print '%sPOW %s:' % (indentspace, self._pow)
+                print('%sPOW %s:' % (indentspace, self._pow))
             else:
                 raise ValueError
             for subquery in self.subqueries:
                 subquery.serialize_debug(indent+2)
-        print '%s%s' % (indentspace, '}')
+        print('%s%s' % (indentspace, '}'))
 
     # Below, we sort all our value_sets - this is for predictability when testing.
     def serialize_term_queries(self, terms):
@@ -172,7 +174,7 @@ class LuceneQuery(object):
         if mutated:
             obj = obj.clone(terms = obj.merge_term_dicts(terms),
                             phrases = obj.merge_term_dicts(phrases),
-                            ranges = reduce(operator.or_, ranges),
+                            ranges = reduce_func(operator.or_, ranges),
                             subqueries = subqueries)
 
         # having recalculated subqueries, there may be the opportunity for further normalization, if we have zero or one subqueries left
@@ -191,7 +193,8 @@ class LuceneQuery(object):
 
     def __unicode__(self):
         return self.serialize_to_unicode(level=0, op=None)
-
+    def __str__(self):
+        return self.serialize_to_unicode(level=0, op=None)
     def serialize_to_unicode(self, level=0, op=None):
         if not self.normalized:
             self, _ = self.normalize()
@@ -201,7 +204,7 @@ class LuceneQuery(object):
             newself.boosts = []
             boost_queries = [self.Q(**kwargs)**boost_score
                              for kwargs, boost_score in self.boosts]
-            newself = newself | (newself & reduce(operator.or_, boost_queries))
+            newself = newself | (newself & reduce_func(operator.or_, boost_queries))
             newself, _ = newself.normalize()
             return newself.serialize_to_unicode(level=level)
         else:
@@ -316,7 +319,7 @@ class LuceneQuery(object):
         # We let people pass in a list of values to match.
         # This really only makes sense for text fields or
         # multivalued fields.
-        if not hasattr(values, "__iter__"):
+        if isinstance(values, text_type) or not hasattr(values, "__iter__"):
             values = [values]
         # We can only do a field_name == "*" if:
         if field_name and field_name != "*":
@@ -480,8 +483,10 @@ class BaseSearch(object):
         options = {}
         for option_module in self.option_modules:
             options.update(getattr(self, option_module).options())
-        # Next line is for pre-2.6.5 python
-        return dict((k.encode('utf8'), v) for k, v in options.items())
+        if PY2:
+            # Next line is for pre-2.6.5 python
+            return dict((k.encode('utf8'), v) for k, v in options.items())
+        return {k: v for k, v in options.items()}
 
     def results_as(self, constructor):
         newself = self.clone()
@@ -642,10 +647,13 @@ class MltSolrSearch(BaseSearch):
             if content is not None:
                 if content_charset is None:
                     content_charset = 'utf-8'
-                if isinstance(content, unicode):
-                    content = content.encode('utf-8')
+                if isinstance(content, text_type):
+                    if PY2:
+                        content = content.encode('utf-8')
                 elif content_charset.lower().replace('-', '_') not in self.trivial_encodings:
-                    content = content.decode(content_charset).encode('utf-8')
+                    content = content.decode(content_charset)
+                    if PY2:
+                        content = content.encode('utf-8')
             self.content = content
             self.url = url
             self.more_like_this = MoreLikeThisHandlerOptions(self.schema)
@@ -707,7 +715,7 @@ class Options(object):
     def update(self, fields=None, **kwargs):
         if fields:
             self.schema.check_fields(fields)
-            if isinstance(fields, basestring):
+            if isinstance(fields, str_type):
                 fields = [fields]
             for field in set(fields) - set(self.fields):
                 self.fields[field] = {}
@@ -754,7 +762,7 @@ class Options(object):
 
 class FacetOptions(Options):
     option_name = "facet"
-    opts = {"prefix":unicode,
+    opts = {"prefix":text_type,
             "sort":[True, False, "count", "index"],
             "limit":int,
             "offset":lambda self, x: int(x) >= 0 and int(x) or self.invalid_value(),
@@ -786,14 +794,14 @@ class HighlightOptions(Options):
             "alternateField":lambda self, x: x if x in self.schema.fields else self.invalid_value(),
             "maxAlternateFieldLength":int,
             "formatter":["simple"],
-            "simple.pre":unicode,
-            "simple.post":unicode,
-            "fragmenter":unicode,
+            "simple.pre":text_type,
+            "simple.post":text_type,
+            "fragmenter":text_type,
             "useFastVectorHighlighter":bool,	# available as of Solr 3.1
             "usePhraseHighlighter":bool,
             "highlightMultiTerm":bool,
             "regex.slop":float,
-            "regex.pattern":unicode,
+            "regex.pattern":text_type,
             "regex.maxAnalyzedChars":int
             }
     def __init__(self, schema, original=None):
@@ -834,7 +842,7 @@ class MoreLikeThisOptions(Options):
         if fields is None:
             fields = [self.schema.default_field_name]
         self.schema.check_fields(fields)
-        if isinstance(fields, basestring):
+        if isinstance(fields, str_type):
             fields = [fields]
         self.fields.update(fields)
 
@@ -984,7 +992,7 @@ class FieldLimitOptions(Options):
     def update(self, fields=None, score=False, all_fields=False):
         if fields is None:
             fields = []
-        if isinstance(fields, basestring):
+        if isinstance(fields, str_type):
             fields = [fields]
         self.schema.check_fields(fields, {"stored": True})
         self.fields.update(fields)
@@ -1017,7 +1025,7 @@ class FacetQueryOptions(Options):
 
     def options(self):
         if self.queries:
-            return {'facet.query':[unicode(q) for q in self.queries],
+            return {'facet.query':[text_type(q) for q in self.queries],
                     'facet':True}
         else:
             return {}
@@ -1025,16 +1033,17 @@ class FacetQueryOptions(Options):
 def params_from_dict(**kwargs):
     utf8_params = []
     for k, vs in kwargs.items():
-        if isinstance(k, unicode):
+        if PY2 and isinstance(k, text_type):
             k = k.encode('utf-8')
         # We allow for multivalued options with lists.
-        if not hasattr(vs, "__iter__"):
+        if isinstance(vs, text_type) or not hasattr(vs, "__iter__"):
             vs = [vs]
         for v in vs:
             if isinstance(v, bool):
                 v = u"true" if v else u"false"
             else:
-                v = unicode(v)
-            v = v.encode('utf-8')
+                v = text_type(v)
+            if PY2:
+                v = v.encode('utf-8')
             utf8_params.append((k, v))
     return sorted(utf8_params)
