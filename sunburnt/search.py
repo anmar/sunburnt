@@ -73,7 +73,7 @@ class LuceneQuery(object):
         print('%s%s' % (indentspace, '}'))
 
     # Below, we sort all our value_sets - this is for predictability when testing.
-    def serialize_term_queries(self, terms):
+    def serialize_term_queries(self, terms, phrases=False):
         s = []
         for name, value_set in terms.items():
             if name:
@@ -81,7 +81,12 @@ class LuceneQuery(object):
             else:
                 field = self.schema.default_field
             if name:
-                s += [u'%s:%s' % (name, value.to_query()) for value in value_set]
+                if phrases:
+                    s += [u'%s:"%s"' % (name, value.to_query()) for value in value_set]
+                else:
+                    s += [u'%s:%s' % (name, value.to_query()) for value in value_set]
+            elif phrases:
+                s += [u'"%s"' % value.to_query() for value in value_set]
             else:
                 s += [value.to_query() for value in value_set]
         return u' AND '.join(sorted(s))
@@ -209,7 +214,7 @@ class LuceneQuery(object):
             return newself.serialize_to_unicode(level=level)
         else:
             u = [s for s in [self.serialize_term_queries(self.terms),
-                             self.serialize_term_queries(self.phrases),
+                             self.serialize_term_queries(self.phrases, phrases=True),
                              self.serialize_range_queries()]
                  if s]
             for q in self.subqueries:
