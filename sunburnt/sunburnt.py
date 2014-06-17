@@ -197,7 +197,10 @@ class SolrInterface(object):
         elif docs is not None and (hasattr(docs, "items") or not hasattr(docs, "__iter__")):
             docs = [docs]
         delete_message = self.schema.make_delete(docs, queries)
-        self.conn.update(str(delete_message), **kwargs)
+        if PY2:
+            self.conn.update(str(delete_message), **kwargs)
+        else:
+            self.conn.update(delete_message.tobytes(), **kwargs)
 
     def commit(self, *args, **kwargs):
         self.conn.commit(*args, **kwargs)
