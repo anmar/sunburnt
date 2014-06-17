@@ -680,6 +680,8 @@ class SolrDelete(object):
 
     def __str__(self):
         return lxml.etree.tostring(self.xml, encoding='utf-8')
+    def tobytes(self):
+        return lxml.etree.tostring(self.xml, encoding='utf-8')
 
 
 class SolrFacetCounts(object):
