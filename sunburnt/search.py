@@ -357,7 +357,7 @@ class LuceneQuery(object):
             except (AssertionError, TypeError):
                 raise SolrError("'%s__%s' argument must be a length-2 iterable"
                                  % (field_name, rel))
-            insts = tuple(sorted(field.instance_from_user_data(v) for v in value))
+            insts = tuple(sorted([field.instance_from_user_data(v) for v in value], key=lambda x: getattr(x, "value")))
         elif rel == 'any':
             if value is not True:
                 raise SolrError("'%s__%s' argument must be True")
