@@ -283,7 +283,7 @@ class SolrRandomField(SolrField):
         raise TypeError("Don't try and store or index values in a RandomSortField")
 
 
-class SolrUUIDField(SolrUnicodeField):
+class SolrUUIDField(SolrField):
     def from_solr(self, v):
         return uuid.UUID(v)
 
