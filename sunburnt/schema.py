@@ -96,6 +96,12 @@ class solr_date(object):
             return 1
         else:
             return 0
+    def __lt__(self, other):
+        try:
+            other = other._dt_obj
+        except AttributeError:
+            pass
+        return self._dt_obj < other
 
 
 def solr_point_factory(dimension):

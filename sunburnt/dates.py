@@ -48,7 +48,7 @@ def datetime_from_w3_datestring(s):
         try:
             tz_delta = datetime_delta_factory(tzd_sign*int(d['tzd_hour']),
                                               tzd_sign*int(d['tzd_minute']))
-        except DateTimeRangeError:
+        except DateTimeRangeError as e:
             raise ValueError(e.args[0])
     else:
         tz_delta = datetime_delta_factory(0, 0)
@@ -57,7 +57,7 @@ def datetime_from_w3_datestring(s):
     del d['tzd_minute']
     try:
         dt = datetime_factory(**d) + tz_delta
-    except DateTimeRangeError:
+    except DateTimeRangeError as e:
         raise ValueError(e.args[0])
     return dt
 
@@ -70,7 +70,7 @@ if mx:
     def datetime_factory(**kwargs):
         try:
             return mx.DateTime.DateTimeFrom(**kwargs)
-        except mx.DateTime.RangeError:
+        except mx.DateTime.RangeError as e:
             raise DateTimeRangeError(e.args[0])
 else:
     def datetime_factory(**kwargs):
