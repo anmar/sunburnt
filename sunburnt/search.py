@@ -13,6 +13,7 @@ class LuceneQuery(object):
     def __init__(self, schema, option_flag=None, original=None):
         self.schema = schema
         self.normalized = False
+        self._query_parser = False
         if original is None:
             self.option_flag = option_flag
             self.terms = collections.defaultdict(set)
@@ -33,6 +34,18 @@ class LuceneQuery(object):
             self._not = original._not
             self._pow = original._pow
             self.boosts = copy.copy(original.boosts)
+            self.query_parser = original._query_parser
+    @property
+    def query_parser(self):
+        return self._query_parser
+    @query_parser.setter
+    def query_parser(self, value):
+        if self._query_parser==value:
+            return
+        self._query_parser = value
+        for q in self.subqueries:
+            q.query_parser = value
+        return
 
     def clone(self, **kwargs):
         q = LuceneQuery(self.schema, original=self)
@@ -229,7 +242,7 @@ class LuceneQuery(object):
                 return u' OR '.join(u)
             elif self._not:
                 assert len(u) == 1
-                if level == 0 or (level == 1 and op == "AND"):
+                if level == 0 or (level == 1 and op == "AND") or self.query_parser:
                     return u'NOT %s'%u[0]
                 else:
                     return u'(*:* AND NOT %s)'%u[0]
@@ -252,6 +265,7 @@ class LuceneQuery(object):
 
     def Q(self, *args, **kwargs):
         q = LuceneQuery(self.schema)
+        q.query_parser = self.query_parser
         q.add(args, kwargs)
         return q
 
@@ -263,15 +277,18 @@ class LuceneQuery(object):
         q._and = False
         q._or = True
         q.subqueries = [self, other]
+        q.query_parser = self.query_parser
         return q
 
     def __and__(self, other):
         q = LuceneQuery(self.schema)
         q.subqueries = [self, other]
+        q.query_parser = self.query_parser
         return q
 
     def __invert__(self):
         q = LuceneQuery(self.schema)
+        q.query_parser = self.query_parser
         q._and = False
         q._not = True
         q.subqueries = [self]
@@ -283,6 +300,7 @@ class LuceneQuery(object):
         except ValueError:
             raise ValueError("Non-numeric value supplied for boost")
         q = LuceneQuery(self.schema)
+        q.query_parser = self.query_parser
         q.subqueries = [self]
         q._and = False
         q._pow = value
@@ -293,6 +311,7 @@ class LuceneQuery(object):
         _args = []
         for arg in args:
             if isinstance(arg, LuceneQuery):
+                arg.query_parser = self.query_parser
                 self.subqueries.append(arg)
             else:
                 _args.append(arg)
@@ -406,6 +425,7 @@ class BaseSearch(object):
 
     def Q(self, *args, **kwargs):
         q = LuceneQuery(self.schema)
+        q.query_parser = self.query_obj.query_parser
         q.add(args, kwargs)
         return q
 
@@ -489,6 +509,8 @@ class BaseSearch(object):
     def add_extra(self, **kwargs):
         newself = self.clone()
         newself.extra.update(kwargs)
+        if 'defType' in kwargs:
+            newself.query_obj.query_parser = True
         return newself
 
     def options(self):
