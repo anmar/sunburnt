@@ -172,6 +172,8 @@ class SolrField(object):
         return unicode(value)
 
     def to_query(self, value):
+        if value=='*':
+            return WildcardString(text_type(value)).escape_for_lqs_term()
         return RawString(self.to_solr(value)).escape_for_lqs_term()
 
     def from_solr(self, value):
@@ -206,6 +208,8 @@ class SolrBooleanField(SolrField):
                 return True
             elif value.lower() == "false":
                 return False
+            elif value=='*':
+                return value
             else:
                 raise ValueError("sorry, I only understand simple boolean strings (field %s)" % 
                         self.name)
@@ -230,6 +234,8 @@ class SolrBinaryField(SolrField):
 class SolrNumericalField(SolrField):
     def normalize(self, value):
         try:
+            if value=='*':
+                return value
             v = self.base_type(value)
         except (OverflowError, TypeError, ValueError):
             raise SolrError("%s is invalid value for %s (field %s)" % 
@@ -272,6 +278,8 @@ class SolrDoubleField(SolrNumericalField):
 
 class SolrDateField(SolrField):
     def normalize(self, v):
+        if v=='*':
+            return v
         return solr_date(v)
 
     def to_user_data(self, v):
@@ -312,6 +320,8 @@ class SolrPointField(SolrField):
         return unicode(self.value_class(v))
 
     def normalize(self, v):
+        if v=='*':
+            return v
         return self.value_class(v).point
 
 
